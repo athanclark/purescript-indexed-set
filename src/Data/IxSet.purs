@@ -1,6 +1,6 @@
 module Data.IxSet
   ( Index (..), IxSet, decodeJsonIxSet
-  , new, insert, insertMany, delete, lookup, fromArray, toArray
+  , new, insert, insertMany, delete, lookup, fromArray, toArray, fromObject, toObject
   ) where
 
 import Prelude
@@ -57,7 +57,8 @@ insert x (IxSet {genIx, valsRef}) = do
 
 
 insertMany :: forall a n. Vec n a -> IxSet a -> Effect (Vec n Index)
-insertMany xs set = traverse (flip insert set) xs
+insertMany xs set =
+  traverse (flip insert set) xs
 
 
 delete :: forall a. Index -> IxSet a -> Effect Unit
@@ -66,9 +67,8 @@ delete (Index ix) (IxSet {valsRef}) =
 
 
 lookup :: forall a. Index -> IxSet a -> Effect (Maybe a)
-lookup (Index ix) (IxSet {valsRef}) = do
-  vals <- Ref.read valsRef
-  pure (Obj.lookup ix vals)
+lookup (Index ix) set =
+  Obj.lookup ix <$> toObject set
 
 
 -- | Given some array of elements (stored as an Array), build a indexed set and report their indicies.
@@ -80,4 +80,18 @@ fromArray newIxSet xs = do
 
 
 toArray :: forall a. IxSet a -> Effect (Array a)
-toArray (IxSet {valsRef}) = Obj.toArrayWithKey (flip const) <$> Ref.read valsRef
+toArray set =
+  Obj.toArrayWithKey (flip const) <$> toObject set
+
+
+-- | Backdoor to build a set with index & value pairs
+fromObject :: forall a. Object a -> (a -> Effect Index) -> Effect (IxSet a)
+fromObject obj genIx = do
+  valsRef <- Ref.new obj
+  pure (IxSet {valsRef, genIx})
+
+
+-- | Backdoor to see every index & value
+toObject :: forall a. IxSet a -> Effect (Object a)
+toObject (IxSet {valsRef}) =
+  Ref.read valsRef
