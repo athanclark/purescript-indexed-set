@@ -37,10 +37,10 @@ instance encodeJsonIxSet :: EncodeJson a => EncodeJson (IxSet a) where
   encodeJson set =
     encodeJson (unsafePerformEffect (toArray set))
 
-decodeJsonIxSet :: forall a. DecodeJson a => (a -> Effect Index) -> Json -> Either String (Effect {set :: IxSet a, indicies :: Array Index})
-decodeJsonIxSet getIx json = do
+decodeJsonIxSet :: forall a. DecodeJson a => Effect (IxSet a) -> Json -> Either String (Effect {set :: IxSet a, indicies :: Array Index})
+decodeJsonIxSet newIxSet json = do
   xs <- decodeJson json
-  pure (fromArray getIx xs)
+  pure (fromArray newIxSet xs)
 
 
 new :: forall a. (a -> Effect Index) -> Effect (IxSet a)
@@ -72,9 +72,9 @@ lookup (Index ix) (IxSet {valsRef}) = do
 
 
 -- | Given some array of elements (stored as an Array), build a indexed set and report their indicies.
-fromArray :: forall a. (a -> Effect Index) -> Array a -> Effect {set :: IxSet a, indicies :: Array Index}
-fromArray getIx xs = do
-  set <- new getIx
+fromArray :: forall a. Effect (IxSet a) -> Array a -> Effect {set :: IxSet a, indicies :: Array Index}
+fromArray newIxSet xs = do
+  set <- newIxSet
   indicies <- traverse (flip insert set) xs
   pure {set, indicies}
 
