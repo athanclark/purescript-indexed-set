@@ -85,8 +85,8 @@ toArray set =
 
 
 -- | Backdoor to build a set with index & value pairs
-fromObject :: forall a. Object a -> (a -> Effect Index) -> Effect (IxSet a)
-fromObject obj genIx = do
+fromObject :: forall a. (a -> Effect Index) -> Object a -> Effect (IxSet a)
+fromObject genIx obj = do
   valsRef <- Ref.new obj
   pure (IxSet {valsRef, genIx})
 
