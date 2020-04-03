@@ -32,7 +32,8 @@ newtype IxSet a = IxSet
   { genIx   :: a -> Effect Index
   , valsRef :: Ref (Object a)
   }
-
+derive instance genericIxSet :: Generic a a' => Generic (IxSet a) _
+-- | Encodes to an Array
 instance encodeJsonIxSet :: EncodeJson a => EncodeJson (IxSet a) where
   encodeJson set =
     encodeJson (unsafePerformEffect (toArray set))
