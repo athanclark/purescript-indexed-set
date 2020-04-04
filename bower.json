@@ -11,7 +11,8 @@
     "purescript-foreign-object": "^2.0.3",
     "purescript-refs": "^4.1.0",
     "purescript-argonaut": "^6.0.0",
-    "purescript-arraybuffer-class": "^0.2.4"
+    "purescript-arraybuffer-class": "^0.2.4",
+    "purescript-ordered-collections": "^1.6.1"
   },
   "devDependencies": {
     "purescript-psci-support": "^4.0.0"

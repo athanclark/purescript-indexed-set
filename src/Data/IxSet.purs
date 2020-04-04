@@ -11,6 +11,7 @@ import Data.Argonaut (Json, class EncodeJson, class DecodeJson, encodeJson, deco
 import Data.ArrayBuffer.Class (class EncodeArrayBuffer, class DecodeArrayBuffer)
 import Data.Vec (Vec)
 import Data.Traversable (traverse)
+import Data.Set (fromFoldable) as Set
 import Foreign.Object (Object)
 import Foreign.Object (empty, insert, delete, lookup, toArrayWithKey) as Obj
 import Effect (Effect)
@@ -37,6 +38,12 @@ derive instance genericIxSet :: Generic a a' => Generic (IxSet a) _
 instance encodeJsonIxSet :: EncodeJson a => EncodeJson (IxSet a) where
   encodeJson set =
     encodeJson (unsafePerformEffect (toArray set))
+-- | Relies on Set ordering to compare values
+instance eqIxSet :: Ord a => Eq (IxSet a) where
+  eq x y = unsafePerformEffect do
+    xs <- toArray x
+    ys <- toArray y
+    pure (Set.fromFoldable xs == Set.fromFoldable ys)
 
 decodeJsonIxSet :: forall a. DecodeJson a => Effect (IxSet a) -> Json -> Either String (Effect {set :: IxSet a, indicies :: Array Index})
 decodeJsonIxSet newIxSet json = do
