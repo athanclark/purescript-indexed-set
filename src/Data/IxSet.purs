@@ -44,6 +44,11 @@ instance eqIxSet :: Ord a => Eq (IxSet a) where
     xs <- toArray x
     ys <- toArray y
     pure (Set.fromFoldable xs == Set.fromFoldable ys)
+instance ordIxSet :: Ord a => Ord (IxSet a) where
+  compare x y = unsafePerformEffect do
+    xs <- toArray x
+    ys <- toArray y
+    pure (compare (Set.fromFoldable xs) (Set.fromFoldable ys))
 
 decodeJsonIxSet :: forall a. DecodeJson a => Effect (IxSet a) -> Json -> Either String (Effect {set :: IxSet a, indicies :: Array Index})
 decodeJsonIxSet newIxSet json = do
