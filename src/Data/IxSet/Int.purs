@@ -19,8 +19,8 @@ import Effect.Ref (Ref)
 import Effect.Ref (new, modify) as Ref
 
 
-increment :: forall a. Ref Int -> a -> Effect Index
-increment nRef _ = Index <<< show <$> Ref.modify (_ + 1) nRef
+increment :: Ref Int -> Effect Index
+increment nRef = Index <<< show <$> Ref.modify (_ + 1) nRef
 
 
 -- FIXME make the EncodeArrayBuffer and DecodeArrayBuffer instance for this variant rely on i32BE instead of String

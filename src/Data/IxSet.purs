@@ -12,7 +12,6 @@ import Data.ArrayBuffer.Class (class EncodeArrayBuffer, class DecodeArrayBuffer)
 import Data.Vec (Vec)
 import Data.Traversable (traverse)
 import Data.Set (fromFoldable) as Set
-import Data.Functor.Invariant (class Invariant)
 import Foreign.Object (Object)
 import Foreign.Object (empty, insert, delete, lookup, toArrayWithKey) as Obj
 import Effect (Effect)
@@ -31,7 +30,7 @@ derive newtype instance encodeArrayBufferIndex :: EncodeArrayBuffer Index
 derive newtype instance decodeArrayBufferIndex :: DecodeArrayBuffer Index
 
 newtype IxSet a = IxSet
-  { genIx   :: a -> Effect Index
+  { genIx   :: Effect Index
   , valsRef :: Ref (Object a)
   }
 derive instance genericIxSet :: Generic a a' => Generic (IxSet a) _
@@ -50,11 +49,11 @@ instance ordIxSet :: Ord a => Ord (IxSet a) where
     xs <- toArray x
     ys <- toArray y
     pure (compare (Set.fromFoldable xs) (Set.fromFoldable ys))
-instance invariantIxSet :: Invariant IxSet where
-  imap toNew fromNew (IxSet {valsRef,genIx}) = unsafePerformEffect do
+instance functorIxSet :: Functor IxSet where
+  map f (IxSet {valsRef,genIx}) = unsafePerformEffect do
     xs <- Ref.read valsRef
-    newValsRef <- Ref.new (map toNew xs)
-    pure (IxSet {valsRef: newValsRef, genIx: genIx <<< fromNew})
+    newValsRef <- Ref.new (map f xs)
+    pure (IxSet {valsRef: newValsRef, genIx})
 
 decodeJsonIxSet :: forall a. DecodeJson a => Effect (IxSet a) -> Json -> Either String (Effect {set :: IxSet a, indicies :: Array Index})
 decodeJsonIxSet newIxSet json = do
@@ -62,7 +61,7 @@ decodeJsonIxSet newIxSet json = do
   pure (fromArray newIxSet xs)
 
 
-new :: forall a. (a -> Effect Index) -> Effect (IxSet a)
+new :: forall a. Effect Index -> Effect (IxSet a)
 new genIx = do
   valsRef <- Ref.new Obj.empty
   pure (IxSet {genIx, valsRef})
@@ -70,7 +69,7 @@ new genIx = do
 
 insert :: forall a. a -> IxSet a -> Effect Index
 insert x (IxSet {genIx, valsRef}) = do
-  ix'@(Index ix) <- genIx x
+  ix'@(Index ix) <- genIx
   Ref.modify_ (Obj.insert ix x) valsRef
   pure ix'
 
@@ -104,7 +103,7 @@ toArray set =
 
 
 -- | Backdoor to build a set with index & value pairs
-fromObject :: forall a. (a -> Effect Index) -> Object a -> Effect (IxSet a)
+fromObject :: forall a. Effect Index -> Object a -> Effect (IxSet a)
 fromObject genIx obj = do
   valsRef <- Ref.new obj
   pure (IxSet {valsRef, genIx})
