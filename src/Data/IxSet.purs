@@ -12,6 +12,7 @@ import Data.ArrayBuffer.Class (class EncodeArrayBuffer, class DecodeArrayBuffer)
 import Data.Vec (Vec)
 import Data.Traversable (traverse)
 import Data.Set (fromFoldable) as Set
+import Data.Functor.Invariant (class Invariant)
 import Foreign.Object (Object)
 import Foreign.Object (empty, insert, delete, lookup, toArrayWithKey) as Obj
 import Effect (Effect)
@@ -49,6 +50,11 @@ instance ordIxSet :: Ord a => Ord (IxSet a) where
     xs <- toArray x
     ys <- toArray y
     pure (compare (Set.fromFoldable xs) (Set.fromFoldable ys))
+instance invariantIxSet :: Invariant IxSet where
+  imap toNew fromNew (IxSet {valsRef,genIx}) = unsafePerformEffect do
+    xs <- Ref.read valsRef
+    newValsRef <- Ref.new (map toNew xs)
+    pure (IxSet {valsRef: newValsRef, genIx: genIx <<< fromNew})
 
 decodeJsonIxSet :: forall a. DecodeJson a => Effect (IxSet a) -> Json -> Either String (Effect {set :: IxSet a, indicies :: Array Index})
 decodeJsonIxSet newIxSet json = do
