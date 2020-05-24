@@ -127,3 +127,15 @@ toUnfoldable (IxSet {mapping}) = IntMap.toUnfoldable mapping
 toUnfoldable' :: forall a f. Unfoldable f => IxSet a -> f a
 toUnfoldable' (IxSet {mapping}) =
   Array.toUnfoldable (IntMap.values mapping)
+
+
+eqExact :: forall a. Eq a => IxSet a -> IxSet a -> Boolean
+eqExact (IxSet x) (IxSet y) =
+  x.mapping == y.mapping && x.nextIndex == y.nextIndex
+
+
+showExact :: forall a. Show a => IxSet a -> String
+showExact (IxSet {mapping}) = show mapping
+
+
+
