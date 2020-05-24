@@ -1,115 +1,129 @@
-module Data.IxSet
-  ( Index (..), IxSet, decodeJsonIxSet
-  , new, insert, insertMany, delete, lookup, fromArray, toArray, fromObject, toObject
-  ) where
+module Data.IxSet where
+
+import Data.IntMap (IntMap)
+import Data.IntMap (values, lookup, insert, delete, empty, toUnfoldable) as IntMap
 
 import Prelude
-import Data.Maybe (Maybe)
-import Data.Either (Either)
+import Data.Maybe (Maybe (..))
+import Data.Tuple (Tuple)
+import Data.Array (sort, toUnfoldable, snoc) as Array
+import Data.Unfoldable (class Unfoldable)
+import Data.Foldable (class Foldable, foldMap, foldr, foldl)
 import Data.Generic.Rep (class Generic)
-import Data.Argonaut (Json, class EncodeJson, class DecodeJson, encodeJson, decodeJson)
-import Data.ArrayBuffer.Class (class EncodeArrayBuffer, class DecodeArrayBuffer)
-import Data.Vec (Vec)
-import Data.Traversable (traverse)
+import Data.Argonaut (class EncodeJson, class DecodeJson, encodeJson, decodeJson)
+import Data.ArrayBuffer.Class
+  ( class DynamicByteLength, class EncodeArrayBuffer, class DecodeArrayBuffer
+  , byteLength, putArrayBuffer, readArrayBuffer)
+import Data.Traversable (class Traversable, traverse, sequence)
 import Data.Set (fromFoldable) as Set
-import Foreign.Object (Object)
-import Foreign.Object (empty, insert, delete, lookup, toArrayWithKey) as Obj
-import Effect (Effect)
-import Effect.Ref (Ref)
-import Effect.Ref (new, modify_, read) as Ref
-import Effect.Unsafe (unsafePerformEffect)
+import Test.QuickCheck (class Arbitrary, arbitrary)
 
 
-newtype Index = Index String
-derive instance genericIndex :: Generic Index _
-derive newtype instance eqIndex :: Eq Index
-derive newtype instance showIndex :: Show Index
-derive newtype instance encodeJsonIndex :: EncodeJson Index
-derive newtype instance decodeJsonIndex :: DecodeJson Index
-derive newtype instance encodeArrayBufferIndex :: EncodeArrayBuffer Index
-derive newtype instance decodeArrayBufferIndex :: DecodeArrayBuffer Index
+type Index = Int
 
+-- | Is intended to obfuscate all `Index`es to their values - serialized and foldable versions
+-- | are simply represented as arrays.
 newtype IxSet a = IxSet
-  { genIx   :: Effect Index
-  , valsRef :: Ref (Object a)
+  { mapping   :: IntMap a
+  , nextIndex :: Int
   }
 derive instance genericIxSet :: Generic a a' => Generic (IxSet a) _
+instance eqIxSet :: Ord a => Eq (IxSet a) where
+  eq (IxSet {mapping: map1}) (IxSet {mapping: map2}) =
+    let x :: Array _
+        x = IntMap.values map1
+        y :: Array _
+        y = IntMap.values map2
+    in  (Array.sort x) == (Array.sort y)
+-- | Relies on Set ordering to compare values
+instance ordIxSet :: Ord a => Ord (IxSet a) where
+  compare x y =
+    let xs :: Array a
+        xs = toUnfoldable' x
+        ys :: Array a
+        ys = toUnfoldable' y
+    in  compare (Set.fromFoldable xs) (Set.fromFoldable ys)
+instance showIxSet :: (Show a, Ord a) => Show (IxSet a) where
+  show set = show (Array.sort (toUnfoldable' set))
+instance functorIxSet :: Functor IxSet where
+  map f (IxSet x) = IxSet x { mapping = map f x.mapping }
+instance foldableIxSet :: Foldable IxSet where
+  foldMap f (IxSet {mapping}) = foldMap f mapping
+  foldr f acc (IxSet {mapping}) = foldr f acc mapping
+  foldl f acc (IxSet {mapping}) = foldl f acc mapping
+instance traversableIxSet :: Traversable IxSet where
+  traverse f (IxSet x) = (\mapping -> IxSet x {mapping = mapping}) <$> traverse f x.mapping
+  sequence (IxSet x) = (\mapping -> IxSet x {mapping = mapping}) <$> sequence x.mapping
 -- | Encodes to an Array
 instance encodeJsonIxSet :: EncodeJson a => EncodeJson (IxSet a) where
   encodeJson set =
-    encodeJson (unsafePerformEffect (toArray set))
--- | Relies on Set ordering to compare values
-instance eqIxSet :: Ord a => Eq (IxSet a) where
-  eq x y = unsafePerformEffect do
-    xs <- toArray x
-    ys <- toArray y
-    pure (Set.fromFoldable xs == Set.fromFoldable ys)
-instance ordIxSet :: Ord a => Ord (IxSet a) where
-  compare x y = unsafePerformEffect do
-    xs <- toArray x
-    ys <- toArray y
-    pure (compare (Set.fromFoldable xs) (Set.fromFoldable ys))
-instance functorIxSet :: Functor IxSet where
-  map f (IxSet {valsRef,genIx}) = unsafePerformEffect do
-    xs <- Ref.read valsRef
-    newValsRef <- Ref.new (map f xs)
-    pure (IxSet {valsRef: newValsRef, genIx})
-
-decodeJsonIxSet :: forall a. DecodeJson a => Effect (IxSet a) -> Json -> Either String (Effect {set :: IxSet a, indicies :: Array Index})
-decodeJsonIxSet newIxSet json = do
-  xs <- decodeJson json
-  pure (fromArray newIxSet xs)
-
-
-new :: forall a. Effect Index -> Effect (IxSet a)
-new genIx = do
-  valsRef <- Ref.new Obj.empty
-  pure (IxSet {genIx, valsRef})
-
-
-insert :: forall a. a -> IxSet a -> Effect Index
-insert x (IxSet {genIx, valsRef}) = do
-  ix'@(Index ix) <- genIx
-  Ref.modify_ (Obj.insert ix x) valsRef
-  pure ix'
+    let xs :: Array a
+        xs = toUnfoldable' set
+    in  encodeJson xs
+instance decodeJsonIxSet :: DecodeJson a => DecodeJson (IxSet a) where
+  decodeJson json = do
+    (xs :: Array a) <- decodeJson json
+    let {set} = fromFoldable xs
+    pure set
+instance dynamicByteLengthIxSet :: DynamicByteLength a => DynamicByteLength (IxSet a) where
+  byteLength set =
+    let xs :: Array a
+        xs = toUnfoldable' set
+    in  byteLength xs
+instance encodeArrayBufferIxSet :: EncodeArrayBuffer a => EncodeArrayBuffer (IxSet a) where
+  putArrayBuffer b o set =
+    let xs :: Array a
+        xs = toUnfoldable' set
+    in  putArrayBuffer b o xs
+instance decodeArrayBufferIxSet :: (DynamicByteLength a, DecodeArrayBuffer a) => DecodeArrayBuffer (IxSet a) where
+  readArrayBuffer b o = do
+    (mxs :: Maybe (Array a)) <- readArrayBuffer b o
+    case mxs of
+      Nothing -> pure Nothing
+      Just xs ->
+        let {set} = fromFoldable xs
+        in  pure (Just set)
+instance arbitraryIxSet :: Arbitrary a => Arbitrary (IxSet a) where
+  arbitrary = do
+    (xs :: Array a) <- arbitrary
+    let {set} = fromFoldable xs
+    pure set
 
 
-insertMany :: forall a n. Vec n a -> IxSet a -> Effect (Vec n Index)
-insertMany xs set =
-  traverse (flip insert set) xs
+empty :: forall a. IxSet a
+empty = IxSet {mapping: IntMap.empty, nextIndex: 0}
 
 
-delete :: forall a. Index -> IxSet a -> Effect Unit
-delete (Index ix) (IxSet {valsRef}) =
-  Ref.modify_ (Obj.delete ix) valsRef
+insert :: forall a. a -> IxSet a -> {set :: IxSet a, index :: Index}
+insert x (IxSet {mapping, nextIndex}) =
+  { set: IxSet
+    { mapping: IntMap.insert nextIndex x mapping
+    , nextIndex: nextIndex + 1
+    }
+  , index: nextIndex
+  }
 
 
-lookup :: forall a. Index -> IxSet a -> Effect (Maybe a)
-lookup (Index ix) set =
-  Obj.lookup ix <$> toObject set
+delete :: forall a. Index -> IxSet a -> IxSet a
+delete i (IxSet x) = IxSet x {mapping = IntMap.delete i x.mapping}
 
 
--- | Given some array of elements (stored as an Array), build a indexed set and report their indicies.
-fromArray :: forall a. Effect (IxSet a) -> Array a -> Effect {set :: IxSet a, indicies :: Array Index}
-fromArray newIxSet xs = do
-  set <- newIxSet
-  indicies <- traverse (flip insert set) xs
-  pure {set, indicies}
+lookup :: forall a. Index -> IxSet a -> Maybe a
+lookup i (IxSet {mapping}) = IntMap.lookup i mapping
 
 
-toArray :: forall a. IxSet a -> Effect (Array a)
-toArray set =
-  Obj.toArrayWithKey (flip const) <$> toObject set
+fromFoldable :: forall a f. Foldable f => f a -> {set :: IxSet a, indicies :: Array Index}
+fromFoldable xs = foldr go {set: empty, indicies: []} xs
+  where
+    go x {set,indicies} =
+      let {set: set', index} = insert x set
+      in  {set: set', indicies: Array.snoc indicies index}
 
 
--- | Backdoor to build a set with index & value pairs
-fromObject :: forall a. Effect Index -> Object a -> Effect (IxSet a)
-fromObject genIx obj = do
-  valsRef <- Ref.new obj
-  pure (IxSet {valsRef, genIx})
+toUnfoldable :: forall a f. Unfoldable f => IxSet a -> f (Tuple Index a)
+toUnfoldable (IxSet {mapping}) = IntMap.toUnfoldable mapping
 
 
--- | Backdoor to see every index & value
-toObject :: forall a. IxSet a -> Effect (Object a)
-toObject (IxSet {valsRef}) =
-  Ref.read valsRef
+toUnfoldable' :: forall a f. Unfoldable f => IxSet a -> f a
+toUnfoldable' (IxSet {mapping}) =
+  Array.toUnfoldable (IntMap.values mapping)
