@@ -15,7 +15,6 @@ import Data.ArrayBuffer.Class
   ( class DynamicByteLength, class EncodeArrayBuffer, class DecodeArrayBuffer
   , byteLength, putArrayBuffer, readArrayBuffer)
 import Data.Traversable (class Traversable, traverse, sequence)
-import Data.Set (fromFoldable) as Set
 import Test.QuickCheck (class Arbitrary, arbitrary)
 
 
@@ -42,7 +41,7 @@ instance ordIxSet :: Ord a => Ord (IxSet a) where
         xs = toUnfoldable' x
         ys :: Array a
         ys = toUnfoldable' y
-    in  compare (Set.fromFoldable xs) (Set.fromFoldable ys)
+    in  compare (Array.sort xs) (Array.sort ys)
 instance showIxSet :: (Show a, Ord a) => Show (IxSet a) where
   show set = show (Array.sort (toUnfoldable' set))
 instance functorIxSet :: Functor IxSet where
